@@ -1,6 +1,7 @@
 # FWO-mesocosm-project
 library(dplyr)
 library(vegan)
+library(plyr)
 setwd("E:/Users/swasof/updated version of the project 19.04.2016/FWO Mesocosm/Data/experiment measurement and analyses/2016/soil analyses/March/Nancy-nematodes data")
 data.nem <- read.table("data nem 2016.txt", h = T, sep = "\t")
 data.nem <- read.table("data nem 2016.txt", h = T, sep = "\t")
@@ -9,6 +10,15 @@ data.nem[,vec] <- lapply(data.nem[,vec], as.numeric)
 #sum <- apply(data.nem[,3:12], 2, sum, na.rm = T)
 fun <- function(x)coalesce(x,0)
 data.nem[,vec] <- lapply(data.nem[,vec], fun)
+
+data.nem$FT1 <- as.character(data.nem$FT)
+data.nem[grep("algal/lichen/moss", data.nem$FT1),"FT1"] = "algal/lichen/moss"
+data.nem[grep("Bacterivores", data.nem$FT1),"FT1"] = "Bacterivores"
+data.nem[grep("fungivores", data.nem$FT1),"FT1"] = "Fungivores"
+data.nem[grep("ectoparasites", data.nem$FT1),"FT1"] ="ectoparasites"
+data.nem[grep("predator", data.nem$FT1),"FT1"] ="predator"
+data.nem[grep("fungivore", data.nem$FT1),"FT1"] ="Fungivores"
+data.nem[grep("omnivore", data.nem$FT1),"FT1"] ="omnivore"
 
 
 head(data.nem)
@@ -29,3 +39,6 @@ data1 <- data.frame(FT=data.nem$FT, data1)
 
 fun <- function(x) x/colSums(x)
 data1[,2:5] <- fun(data1[,2:5])
+data1[,2:5] <- apply(data1[,2:5], 2, function(x) (x/sum(x))*100)
+
+ddply(data1, .(FT), summarize, control = sum(control), Eutro = sum (Eutro), Meso = sum(Meso), Oligo = sum (Oligo))
