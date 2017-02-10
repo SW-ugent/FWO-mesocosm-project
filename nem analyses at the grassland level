@@ -1,0 +1,93 @@
+setwd("E:/Users/swasof/updated version of the project 19.04.2016/FWO Mesocosm/Data/experiment measurement and analyses/2016/soil analyses/March/Nancy-nematodes data")
+
+data.nem <- read.table("data nem 2016.txt", h = T, sep = "\t")
+sum <- apply(data.nem[,3:12], 2, sum, na.rm = T)
+data.nem$Eutro <- coalesce(data.nem$GP.H, 0) +coalesce(data.nem$TV.H, 0) +coalesce(data.nem$L.H, 0)
+data.nem$Meso <- coalesce(data.nem$GP.M, 0) +coalesce(data.nem$TV.M, 0) +coalesce(data.nem$L.M, 0)
+data.nem$Oligo <- coalesce(data.nem$GP.L, 0) +coalesce(data.nem$TV.L, 0) +coalesce(data.nem$L.L, 0)
+
+####
+data.nem1 <- decostand(data.nem[,3:12], "total", na.rm = T, MARGIN = 1)
+
+data.nem1$FT1 <- as.character(data.nem$FT)
+data.nem1[grep("algal/lichen/moss", data.nem1$FT1),"FT1"] = "algal/lichen/moss"
+data.nem1[grep("Bacterivores", data.nem1$FT1),"FT1"] = "Bacterivores"
+data.nem1[grep("fungivores", data.nem1$FT1),"FT1"] = "Fungivores"
+data.nem1[grep("ectoparasites", data.nem1$FT1),"FT1"] ="ectoparasites"
+data.nem1[grep("predator", data.nem1$FT1),"FT1"] ="predator"
+data.nem1[grep("fungivore", data.nem1$FT1),"FT1"] ="Fungivores"
+data.nem1[grep("omnivore", data.nem1$FT1),"FT1"] ="omnivore"
+
+
+#data.nem1$Eutro <- coalesce(data.nem1$GP.H, 0) +coalesce(data.nem1$TV.H, 0) +coalesce(data.nem1$L.H, 0)
+#data.nem1$Meso <- coalesce(data.nem1$GP.M, 0) +coalesce(data.nem1$TV.M, 0) +coalesce(data.nem1$L.M, 0)
+#data.nem1$Oligo <- coalesce(data.nem1$GP.L, 0) +coalesce(data.nem1$TV.L, 0) +coalesce(data.nem1$L.L, 0)
+
+
+
+var <- ddply(data.nem1, .(FT1), summarize , Control = sum(control, na.rm = T), GP.L = sum(GP.L, na.rm = T),
+             GP.M= sum(GP.M, na.rm = T), GP.H= sum(GP.H, na.rm = T),
+             L.L=sum(L.L, na.rm = T), L.M= sum(L.M, na.rm = T),
+             L.H=sum(L.H, na.rm = T), TV.L=sum(TV.L, na.rm = T),
+             TV.M=sum(TV.M, na.rm = T), TV.H= sum(TV.H, na.rm = T), Eutro = sum(Eutro, na.rm = T),
+             Meso = sum(Meso, na.rm = T), Oligo = sum(Oligo, na.rm = T))
+rownames(var) <- var$FT1
+
+var1 <- as.matrix(var[,-1])
+barplot(var1[,1:10], col = c("lightblue", "mistyrose",
+                      "lightcyan", "lavender", "red", "green", "blue", "yellow", "orange"), legend = rownames(var1))
+
+barplot(var1[,11:13], col = c("lightblue", "mistyrose",
+                             "lightcyan", "lavender", "red", "green", "blue", "yellow", "orange"), legend = rownames(var1))
+
+
+
+index <- match(c("algal/lichen/moss", "ectoparasites", "epidermal/root hair", "migratory endoparasites", "sedentary parasites", "semi-endoparasites"), rownames(var1)   )
+var2 <- var1[index,]
+barplot(var2[,1:10], col = c("brown", "darkgray",
+                      "green",  "orange", "blue", "red"), legend = rownames(var2))
+
+tiff("herbivores_grass.tif",  width = 480, height = 480, units = "px", pointsize = 10)
+barplot(var2[,11:13], col = c("brown", "darkgray",
+                      "green",  "orange", "blue", "red"), legend = rownames(var2))
+#dev.off()
+### main categories
+data.nem1$FT2 <- data.nem1$FT1
+data.nem1[grep("ectoparasites", data.nem1$FT1),"FT2"] ="Herbivores"
+data.nem1[grep("epidermal/root hair", data.nem1$FT1),"FT2"] ="Herbivores"
+data.nem1[grep("migratory endoparasites", data.nem1$FT1),"FT2"] ="Herbivores"
+data.nem1[grep("sedentary parasites", data.nem1$FT1),"FT2"] ="Herbivores"
+data.nem1[grep("semi-endoparasites", data.nem1$FT1),"FT2"] ="Herbivores"
+data.nem1[grep("algal/lichen/moss", data.nem1$FT1),"FT2"] ="Herbivores"
+
+
+var.herb <- ddply(data.nem1, .(FT2), summarize , Control = sum(control, na.rm = T), GP.L = sum(GP.L, na.rm = T),
+             GP.M= sum(GP.M, na.rm = T), GP.H= sum(GP.H, na.rm = T),
+             L.L=sum(L.L, na.rm = T), L.M= sum(L.M, na.rm = T),
+             L.H=sum(L.H, na.rm = T), TV.L=sum(TV.L, na.rm = T),
+             TV.M=sum(TV.M, na.rm = T), TV.H= sum(TV.H, na.rm = T), Eutro = sum(Eutro, na.rm = T),
+             Meso = sum(Meso, na.rm = T), Oligo = sum(Oligo, na.rm = T))
+rownames(var.herb) <- var.herb$FT2
+
+var.herb <- as.matrix(var.herb[,-1])
+barplot(var.herb[,1:10], col = c("red", "orange","darkgreen", "blue", "darkgray"), legend = rownames(var.herb))
+
+tiff("herbivores_grass.tif", height = 8, width = 8, units = "cm", res = 300)
+barplot(var.herb[,11:13], col = c("red", "orange","darkgreen", "blue", "darkgray"), legend = rownames(var.herb))
+dev.off()
+## without herbivores
+index <- which(data.nem1$FT2 == "Herbivores")
+data.nem2 <- data.nem1[-index, ]
+
+var.herb1 <- ddply(data.nem2, .(FT2), summarize , Control = sum(control, na.rm = T), GP.L = sum(GP.L, na.rm = T),
+                  GP.M= sum(GP.M, na.rm = T), GP.H= sum(GP.H, na.rm = T),
+                  L.L=sum(L.L, na.rm = T), L.M= sum(L.M, na.rm = T),
+                  L.H=sum(L.H, na.rm = T), TV.L=sum(TV.L, na.rm = T),
+                  TV.M=sum(TV.M, na.rm = T), TV.H= sum(TV.H, na.rm = T), Eutro = sum(Eutro, na.rm = T),
+                  Meso = sum(Meso, na.rm = T), Oligo = sum(Oligo, na.rm = T))
+rownames(var.herb1) <- var.herb1$FT2
+
+var.herb1 <- as.matrix(var.herb1[,-1])
+barplot(var.herb1[,1:10], col = c("red", "orange", "blue", "gray"), legend = rownames(var.herb1))
+barplot(var.herb1[,11:13], col = c("red", "orange", "blue", "gray"), legend = rownames(var.herb1))
+
