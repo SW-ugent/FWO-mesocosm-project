@@ -1,0 +1,276 @@
+library(effects)
+library(lme4)
+library(multcomp)
+library(moments)
+library(lsmeans)
+library(sjPlot)
+library(LMERConvenienceFunctions)
+library(MASS)
+library(agricolae)
+###################################
+# For the analysis of more than three factors, we will make use of so-called "association graphs" to visualize the associations/dependencies between factors.
+# Association graphs can be made with the package gRbase, but unfortunately that package requires some steps to be installed and loaded:
+source("https://bioconductor.org/biocLite.R")
+biocLite("graph")
+n
+biocLite("RBGL")
+n
+biocLite("Rgraphviz")
+n
+#install.packages("gRbase")
+library(graph)
+library(RBGL)
+library(Rgraphviz)
+library(gRbase)
+setwd("E:/Users/swasof/updated version of the project 19.04.2016/FWO Mesocosm/Data/experiment measurement and analyses/2016/plants analyses/biomass per mesocosm/september 30th")
+biomass <- read.table("biomassMesocosm_oct.txt"  ,  h = T)
+biomass$Pots <- as.character(biomass$Pots)
+rownames(biomass) <- biomass$Pots
+biomass$Pots <- gsub("control", "control-control", biomass$Pots)
+
+split <- as.data.frame(do.call("rbind", strsplit(biomass$Pots, "-", fixed = TRUE)))
+colnames(split) <- c("N", "P", "region", "inocula")
+biomass <- data.frame(biomass, split)
+biomass$inocula <- as.character(biomass$inocula)
+biomass$inocula <- gsub("control", "1-control", biomass$inocula)
+biomass$inocula <- gsub("L", "2-L", biomass$inocula)
+biomass$inocula <- gsub("M", "3-M", biomass$inocula)
+biomass$inocula <- gsub("H", "4-H", biomass$inocula)
+
+setwd("E:/Users/swasof/updated version of the project 19.04.2016/FWO Mesocosm/Data/experiment measurement and analyses/2016/soil analyses/July/Results phosphor")
+p <- read.table("P_july.txt", h = T)
+p$Biota <- gsub("Control", "control", as.character(p$Biota))
+p$N <- substr(p$Nutrients, 1,2)
+p$P <- substr(p$Nutrients, 3,4)
+p$region <- do.call("rbind", strsplit(as.character(p$Biota), "-", fixed = TRUE))[,1]
+p$inocula<- do.call("rbind", strsplit(as.character(p$Biota), "-", fixed = TRUE))[,2]
+p$vector<- paste(p$N, p$P, p$region, p$inocula, sep = "-")
+p <- p[match(biomass$Pots, p$vector),]
+
+biomass$OlsenP <- p$OlsenP
+
+## if I run a mixed effect model with the region as a random effect, the variance explained by the region variable is 0
+lme1 <- lmer(Biomasse~1 + (1|region), data = biomass)
+# to be sure that this is not a problem and if I can then just use a simple glm, I did different options:
+# 1: I run a glm model with the region as a fixed model and found that its effect is not significant and it is samll
+mod0 <- glm (Biomasse ~1 , data = biomass)
+mod1 <- glm (Biomasse ~1 + region, data = biomass)
+AIC(mod0, mod1)
+# 2: taking the boxplot per region, it is clear that the biomasse does not differ between region
+boxplot(Biomasse~region, data = biomass)
+SUB.NPIno <- lmer(Biomasse ~ N * P + (1| region) , data=biomass)
+# check model assumptions
+mcp.fnc(SUB.NPIno)
+# So now we know that we can use a glm instead of lmer ....Youpi
+# Now I should verify if the biomass var has a normal distribution
+agostino.test(biomass$Biomasse)
+# p-value = 0.0421, it is not normally distributed
+agostino.test(sqrt(biomass$Biomasse))
+# p-value = 0.8469 I will use another var "biomass" of the transformed Biomasse
+biomass$biomass <- sqrt(biomass$Biomasse)
+########################################################################
+########################################################################
+mod.nul <- glm(biomass ~ 1, family=gaussian, data=biomass)
+
+#For each coefficient of every level of the categorical variable, a Wald test is performed to test
+#whether the pairwise difference between the coefficient of the reference class and the other class is different from zero or not. 
+mod.N <- glm(biomass ~ N, family=gaussian, data=biomass)
+summary(mod.N)
+#You can check the overall effect of the variable by performing a likelihood ratio test:
+anova(mod.N, test = "LRT")
+plot(N.eff <- effect("N", mod.N), type = "response")
+#You could also fit the model without an intercept by adding - 1 to the model formula to see all coefficients directly:
+#Here, the Wald test checks not the pairwise difference between coefficients but the hypothesis that each individual coefficient is zero. 
+mod.N1 <- glm(biomass ~ N-1, family=gaussian, data=biomass)
+# LRT tests the hypothesis that all coefficients of rank are zero:
+anova(mod.N1, test = "LRT")
+anova(mod.N, mod.N1, test = "LRT")
+########################################################################
+########################################################################
+mod.P <- glm(biomass ~ P, family=gaussian, data=biomass)
+summary(mod.P)
+plot(P.eff <- effect("P", mod.P), type = "response")
+## test for tukeyHSD
+summary(glht(mod.P, mcp(P="Tukey")))
+########################################################################
+########################################################################
+biomass$inocula <- as.factor(biomass$inocula)
+mod.inocula <- glm(biomass ~inocula, family=gaussian, data=biomass)
+summary(mod.inocula)
+plot(P.eff <- effect("inocula", mod.inocula), type = "response")
+## test for tukeyHSD
+summary(glht(mod.inocula, mcp(inocula="Tukey")))
+########################################################################
+########################################################################
+mod.NP <- glm(biomass ~ N*P, family=gaussian, data=biomass)
+biomass1<- subset(biomass, P != "P1" & P != "P3")
+mosaicplot(xtabs(biomass~N + P, data = biomass1))
+summary(mod.NP)
+#test for the overall significance of the P var
+anova(mod.NP, test = "LRT")
+#lsmeans(mod.NP, pairwise ~ N : P)
+plot(allEffects(mod.NP),  ci.style="bars", x.var = "N")
+aggregate(biomass ~ N, data = biomass, mean)
+aggregate(biomass ~ P, data = biomass, mean)
+aggregate(biomass ~ inocula, data = biomass, mean)
+with(biomass, tapply(biomass, list(N, P), mean))
+
+interaction.plot(x.factor = biomass1$P, 
+                 trace.factor = biomass1$N,
+                 response = biomass1$biomass)
+boxplot(biomass ~ N * P, data=biomass)
+
+aov1 <- aov(biomass ~ N * P, data=biomass)
+summary(aov1)
+model.tables(aov1, type = "means")
+plot(allEffects(aov1), multiline=TRUE, ci.style="bars")
+# this does the same: 
+plot(allEffects(mod.NP), multiline=TRUE, ci.style="bars")
+#All pairwise comparisons are given together with a p-value. Warning: These comparisons only concern the main effects. 
+#The interactions are ignored. If interactions are present, a warning will be given (as in the output above).
+summary(glht(mod.NP, linfct = mcp(P = "Tukey")))
+## In order to get multiple comparison for each level of the interaction
+#We can create a variable which corresponds to the interactions for a variable and use this variable to carry out the mcp
+### the glht is not working 
+#This is because the glht function is only evaluating differences among treatments, as specified. It prints a warning because the interaction term in your model implies that it can't just compare means by level of treatment in a straightforward manner.
+## a solution was found in this website: http://stats.stackexchange.com/questions/5250/multiple-comparisons-on-a-mixed-effects-model
+# and here http://stats.stackexchange.com/questions/43361/multiple-comparisons-with-the-glht-function-in-r-gives-strange-results
+########################################################################
+########################################################################
+biomass$NP <- interaction(biomass$N, biomass$P)
+#mod.NP <- glm(Biomasse ~ -1 + NP, family=gaussian, data=biomass)
+mod.NP <- glm(biomass ~  NP, family=gaussian, data=biomass)
+summary(mod.NP)
+summary(glht(mod.NP, mcp(NP="Tukey")))
+NP.ef <- effect("NP", mod.NP)
+plot(NP.ef, type = "response")
+plot(residuals(mod.NP, type="pearson") ~ fitted(mod.NP))
+########################################################################
+########################################################################
+########################################################################
+mod.NP1 <- glm(biomass ~ N+P, family=gaussian, data=biomass)
+summary(mod.NP1)
+anova(mod.NP1,  test = "LRT")
+NP.ef1 <- effect(c("N", "P"), mod.NP1)
+plot(allEffects(mod.NP1), multiline=TRUE, ci.style="bars")
+#comp <-HSD.test(mod.NP, trt = "P", group = FALSE)
+########################################################################
+########################################################################
+
+mod.PInoc <- glm(Biomasse ~ P*inocula, family=gaussian, data=biomass)
+summary(mod.PInoc)
+plot(allEffects(mod.PInoc), multiline=TRUE, ci.style="bars")
+anova(mod.PInoc,  test = "LRT")
+MPInoc.ef1 <- effect("P*inocula", mod.PInoc)
+summary(MPInoc.ef1)
+plot(MPInoc.ef1, type="response")
+plot(residuals(mod.PInoc, type="pearson") ~ fitted(mod.PInoc))
+########################################################################
+########################################################################
+biomass$PInoc <- interaction(biomass$P, biomass$inocula)
+mod.PInoc1 <- glm(Biomasse ~ PInoc, family=gaussian, data=biomass)
+summary(mod.PInoc1)
+hoc.PINOC <- summary(glht(mod.PInoc1, mcp(PInoc = "Tukey")))
+df1<- data.frame( Estimate = round(hoc.PINOC$test$coefficients,3), SD= round(hoc.PINOC$test$sigma,3),
+                  Z.value= round(hoc.PINOC$test$tstat,3), pvalue = round(hoc.PINOC$test$pvalues,3))
+#write.table(df1, "2_way interac. PINOC.txt")
+mosaicplot(xtabs(biomass$biomass ~ biomass$P + biomass$inocula))
+########################################################################
+########################################################################
+
+MyTab3 <- xtabs(biomass~ N + P + inocula, data=biomass)
+mosaicplot(MyTab3, shade=TRUE, margin=mod1$margin)
+mod1 <- loglm(~ N + P + inocula, data=MyTab3)
+mosaicplot(fitted(mod1))
+################################
+mod.NInoc <- glm(biomass ~ N*inocula, family=gaussian, data=biomass)
+summary(mod.NInoc)
+anova(mod.NInoc,  test = "LRT")
+MNInoc.ef1 <- effect("N*inocula", mod.NInoc)
+summary(MNInoc.ef1)
+plot(MNInoc.ef1, type="response")
+plot(residuals(mod.NInoc, type="pearson") ~ fitted(mod.PInoc))
+########################################################################
+########################################################################
+# Model 5: Homogeneous association between N , P and inocula
+mod.NPInoc <- glm(biomass ~ N*inocula + N*P + P*inocula, family=gaussian, data=biomass)
+summary(mod.NPInoc)
+anova(mod.NPInoc,  test = "LRT")
+MNPInoc.ef1 <- effect("N*inocula", mod.NInoc)
+summary(MNPInoc.ef1)
+plot(MNPInoc.ef1, type="response")
+#plot(residuals(mod.NPInoc, type="pearson") ~ fitted(mod.PInoc))
+glht(mod.NPInoc, mcp(N = "Tukey"))
+
+########################################################################
+########################################################################
+mod.NPInoc1 <- glm(biomass ~ N*P*inocula, family=gaussian, data=biomass)
+summary(mod.NPInoc1)
+anova(mod.NPInoc1,  test = "LRT")
+MNPInoc.ef1 <- effect("N*P*inocula", mod.NPInoc1)
+summary(MNPInoc.ef1)
+plot(MNPInoc.ef1, type="response")
+#plot(residuals(mod.NPInoc, type="pearson") ~ fitted(mod.NPInoc1))
+glht(mod.NPInoc1, mcp(N = "Tukey"))
+mosaicplot(xtabs (biomass~N +P + inocula, data = biomass))
+####### 
+biomass$NPInoc <- interaction (biomass$N, biomass$P, biomass$inocula)
+mod.NPInoc <- glm(biomass ~ NPInoc, family=gaussian, data=biomass)
+summary(mod.NPInoc)
+df <- summary(glht(mod.NPInoc, mcp(NPInoc = "Tukey")))
+df1<- data.frame( Estimate = round(df14$test$coefficients,3), SD= round(df14$test$sigma,3),
+                  Z.value= round(df14$test$tstat,3), pvalue = round(df14$test$pvalues,3))
+#write.table(df1, "3_way interac. NPINoc Fac.txt")
+mosaicplot(xtabs(biomass$biomass ~ biomass$P + biomass$inocula))
+########################################################################
+########################################################################
+########################################################################
+########################################################################
+# Example of stepwise regression:
+mod.nul <- glm(biomass ~ 1, family=gaussian, data=biomass)
+mod.stp <- stepAIC(mod.nul, scope=list(lower=~1, upper=~N*P*inocula), direction="both")
+summary(mod.stp)
+
+mod.P_Inoc <- glm(biomass ~ P + inocula, family=gaussian, data=biomass)
+summary(mod.P_Inoc)
+summary(glht(mod.P_Inoc, mcp (P = "Tukey")))
+summary(glht(mod.P_Inoc, mcp (inocula = "Tukey")))
+#tiff("P_inoc.tif", res= 300, height = 10, width = 25, units = "cm")
+plot(allEffects(mod.P_Inoc ), ci.style="bars")
+#dev.off()
+
+mod.P_Inoc <- glm(biomass ~ P + inocula, family=gaussian, data=biomass)
+summary(mod.P_Inoc)
+summary(glht(mod.P_Inoc, mcp (P = "Tukey")))
+summary(glht(mod.P_Inoc, mcp (inocula = "Tukey")))
+#tiff("P_inoc.tif", res= 300, height = 10, width = 25, units = "cm")
+plot(allEffects(mod.P_Inoc ), ci.style="bars")
+#dev.off()
+plot(allEffects(mod.P_Inoc ), ci.style="bands")
+########################################################################
+########################################################################
+# Example of stepwise regression:
+mod.nul <- glm(biomass ~ 1, family=gaussian, data=biomass)
+mod.stp <- stepAIC(mod.nul, scope=list(lower=~1, upper=~N*OlsenP*inocula), direction="both")
+summary(mod.stp)
+
+mod.OlsenP.Inoc <- glm(biomass ~ OlsenP * inocula, family=gaussian, data=biomass)
+summary(mod.OlsenP.Inoc)
+summary(glht(mod.OlsenP.Inoc, mcp (inocula = "Tukey")))
+plot(allEffects(mod.OlsenP.Inoc ), multiline = TRUE)
+## check for outliers
+dotchart(biomass$Biomasse, group = biomass$N)
+dotchart(biomass$Biomasse, group = biomass$P)
+dotchart(biomass$Biomasse, group = biomass$inocula)
+
+
+
+#find the relationship between biomass and N and P
+
+coplot(Biomasse ~ OlsenP|N * inocula, data = biomass ,  panel = panel.smooth)
+coplot(Biomasse ~ P|N * inocula, data = biomass ,  panel = panel.smooth)
+coplot(Biomasse ~ OlsenP|N, data = biomass ,  panel = panel.smooth)
+coplot(Biomasse ~ OlsenP|inocula, data = biomass ,  panel = panel.smooth)
+
+
+summary(glm(Biomasse~N*P*inocula, data = biomass, family = "gaussian"))
